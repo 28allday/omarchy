@@ -1,0 +1,45 @@
+#!/bin/bash
+NM_MARKER="/tmp/.gamescope-started-nm"
+LOG_TAG="gamescope-nm"
+log() { logger -t "$LOG_TAG" "$*"; echo "$*"; }
+
+if [ -f "$NM_MARKER" ]; then
+    rm -f "$NM_MARKER"
+    if systemctl is-active --quiet NetworkManager.service; then
+        log "Stopping NetworkManager service..."
+        systemctl stop NetworkManager.service 2>/dev/null || true
+        sleep 1
+    fi
+
+    # Restart iwd to restore WiFi connection (must restart, not just start,
+    # because iwd may be "active" but not managing the interface while NM had control)
+    log "Restarting iwd to restore WiFi..."
+    systemctl restart iwd.service 2>/dev/null || true
+    sleep 3
+
+    # Find the wireless interface dynamically
+    WIFI_IFACE=$(iw dev 2>/dev/null | awk '/Interface/{print $2; exit}')
+    if [ -z "$WIFI_IFACE" ]; then
+        WIFI_IFACE=$(ls /sys/class/net/ 2>/dev/null | grep -E '^wl' | head -1)
+    fi
+
+    if [ -n "$WIFI_IFACE" ]; then
+        # Verify WiFi restoration (iwd auto-connects to known networks)
+        if iwctl station "$WIFI_IFACE" show 2>/dev/null | grep -qi "connected"; then
+            log "WiFi restored on $WIFI_IFACE"
+        else
+            log "Triggering WiFi scan on $WIFI_IFACE..."
+            iwctl station "$WIFI_IFACE" scan 2>/dev/null || true
+            sleep 3
+            if iwctl station "$WIFI_IFACE" show 2>/dev/null | grep -qi "connected"; then
+                log "WiFi connected on $WIFI_IFACE after scan"
+            else
+                log "WiFi on $WIFI_IFACE may need manual reconnection via iwctl"
+            fi
+        fi
+    else
+        log "No wireless interface found - skipping WiFi verification"
+    fi
+else
+    log "No marker file found - NetworkManager was not started by gaming session"
+fi

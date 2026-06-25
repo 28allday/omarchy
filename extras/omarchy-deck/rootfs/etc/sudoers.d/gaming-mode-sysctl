@@ -1,0 +1,16 @@
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w kernel.sched_autogroup_enabled=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w kernel.sched_migration_cost_ns=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w kernel.sched_min_granularity_ns=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w kernel.sched_latency_ns=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w vm.swappiness=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w vm.dirty_ratio=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w vm.dirty_background_ratio=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w vm.dirty_writeback_centisecs=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w vm.dirty_expire_centisecs=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w fs.inotify.max_user_watches=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w fs.inotify.max_user_instances=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w fs.file-max=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w net.core.rmem_max=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/sysctl -w net.core.wmem_max=*
+%video ALL=(ALL) NOPASSWD: /usr/bin/nvidia-smi -pm *
+%video ALL=(ALL) NOPASSWD: /usr/bin/nvidia-smi -pl *

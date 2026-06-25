@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Game Mode
+GenericName=Steam Deck Mode
+Comment=Flip into Steam Big Picture (Gamescope) — Steam Deck mode
+Exec=/usr/local/bin/switch-to-gaming
+Icon=input-gaming
+Terminal=false
+StartupNotify=true
+Categories=Game;
+Keywords=gaming;game;steam;gamescope;deck;bigpicture;

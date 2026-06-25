@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Game Mode Setting
+GenericName=Game Mode Settings
+Comment=Adjust monitor, GPU, resolution, and refresh rate for Game Mode
+Exec=xdg-terminal-exec --app-id=TUI.float -e omarchy-deck-settings
+Icon=input-gaming
+Terminal=false
+StartupNotify=true
+Categories=Settings;Game;
+Keywords=gaming;game;steam;gamescope;deck;monitor;refresh;gpu;

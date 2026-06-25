@@ -1,0 +1,100 @@
+#!/bin/bash
+LOG_TAG="steam-library-mount"
+MOUNT_BASE="/run/media/$USER"
+
+log() { logger -t "$LOG_TAG" "$*"; }
+
+check_steam_library() {
+    local mount_point="$1"
+    if [[ -d "$mount_point/steamapps" ]] || \
+       [[ -d "$mount_point/SteamLibrary/steamapps" ]] || \
+       [[ -d "$mount_point/SteamLibrary" ]] || \
+       [[ -f "$mount_point/libraryfolder.vdf" ]] || \
+       [[ -f "$mount_point/steamapps/libraryfolder.vdf" ]] || \
+       [[ -f "$mount_point/SteamLibrary/libraryfolder.vdf" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+handle_device() {
+    local device="$1"
+    local part_name
+    part_name=$(basename "$device")
+
+    log "Checking device: $device"
+
+    if findmnt -n "$device" &>/dev/null; then
+        local existing_mount
+        existing_mount=$(findmnt -n -o TARGET "$device" 2>/dev/null)
+        if [[ -n "$existing_mount" ]] && check_steam_library "$existing_mount"; then
+            log "Steam library already mounted at $existing_mount"
+        else
+            log "Device $device mounted at $existing_mount (no Steam library)"
+        fi
+        return
+    fi
+
+    [[ "$device" =~ [0-9]$ ]] || { log "Skipping whole disk: $device"; return; }
+
+    local fstype
+    fstype=$(lsblk -n -o FSTYPE --nodeps "$device" 2>/dev/null)
+    case "$fstype" in
+        ext4|ext3|ext2|btrfs|xfs|ntfs|vfat|exfat|f2fs) ;;
+        crypto_LUKS) log "Skipping encrypted: $device"; return ;;
+        swap) log "Skipping swap: $device"; return ;;
+        "") log "Skipping $device - no filesystem"; return ;;
+        *) log "Skipping $device - unsupported filesystem: $fstype"; return ;;
+    esac
+
+    if ! command -v udisksctl &>/dev/null; then
+        log "udisksctl not found - cannot mount $device"
+        return
+    fi
+
+    log "Attempting to mount $device..."
+    local mount_output
+    mount_output=$(udisksctl mount -b "$device" --no-user-interaction 2>&1)
+    local mount_rc=$?
+
+    if [[ $mount_rc -ne 0 ]]; then
+        log "Could not mount $device: $mount_output"
+        return
+    fi
+
+    local mount_point
+    mount_point=$(findmnt -n -o TARGET "$device" 2>/dev/null)
+
+    if [[ -z "$mount_point" ]]; then
+        log "Could not determine mount point for $device"
+        return
+    fi
+
+    if check_steam_library "$mount_point"; then
+        log "Steam library found on $device at $mount_point - keeping mounted"
+    else
+        log "No Steam library on $device - unmounting"
+        udisksctl unmount -b "$device" --no-user-interaction 2>/dev/null
+    fi
+}
+
+log "Starting Steam library drive monitor..."
+
+shopt -s nullglob
+for dev in /dev/sd*[0-9]* /dev/nvme*p[0-9]* /dev/mmcblk*p[0-9]*; do
+    [[ -b "$dev" ]] && handle_device "$dev"
+done
+shopt -u nullglob
+
+log "Initial device scan complete, watching for new devices..."
+
+udevadm monitor --kernel --subsystem-match=block 2>/dev/null | while read -r line; do
+    if [[ "$line" =~ ^KERNEL.*[[:space:]]add[[:space:]]+.*/([^/[:space:]]+)[[:space:]]+\(block\)$ ]]; then
+        dev_name="${BASH_REMATCH[1]}"
+        dev_path="/dev/$dev_name"
+        if [[ "$dev_name" =~ [0-9]$ ]] && [[ -b "$dev_path" ]]; then
+            sleep 1
+            handle_device "$dev_path"
+        fi
+    fi
+done

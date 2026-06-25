@@ -1,0 +1,145 @@
+#!/bin/bash
+log() { logger -t gamescope-wrapper "$*"; echo "$*"; }
+
+enable_performance_mode() {
+    log "Enabling performance mode..."
+
+    # Set CPU governor to performance
+    for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        echo performance > "$gov" 2>/dev/null && log "CPU governor set to performance"
+        break  # Log only once
+    done
+    for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        echo performance > "$gov" 2>/dev/null
+    done
+
+    # NVIDIA dGPU performance mode
+    if command -v nvidia-smi &>/dev/null; then
+        # Enable persistence mode (keeps GPU initialized)
+        sudo -n nvidia-smi -pm 1 2>/dev/null && log "NVIDIA persistence mode enabled"
+
+        # Set power limit to maximum
+        local max_power
+        max_power=$(nvidia-smi --query-gpu=power.max_limit --format=csv,noheader,nounits 2>/dev/null | head -1 | cut -d'.' -f1)
+        if [[ -n "$max_power" && "$max_power" -gt 0 ]]; then
+            sudo -n nvidia-smi -pl "$max_power" 2>/dev/null && log "NVIDIA power limit set to ${max_power}W"
+        fi
+
+        # Prevent NVIDIA GPU runtime suspend
+        for nvidia_pci in /sys/bus/pci/devices/*/power/control; do
+            if [[ -f "${nvidia_pci%/power/control}/driver" ]]; then
+                local drv=$(basename "$(readlink -f "${nvidia_pci%/power/control}/driver")" 2>/dev/null)
+                if [[ "$drv" == "nvidia" ]]; then
+                    echo on > "$nvidia_pci" 2>/dev/null && log "NVIDIA runtime suspend disabled"
+                fi
+            fi
+        done
+    fi
+
+    # Set power profile to performance (if power-profiles-daemon is available)
+    if command -v powerprofilesctl &>/dev/null; then
+        powerprofilesctl set performance 2>/dev/null && log "Power profile set to performance"
+    fi
+}
+
+restore_balanced_mode() {
+    log "Restoring balanced mode..."
+
+    # Restore CPU governor to powersave/schedutil
+    for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        echo powersave > "$gov" 2>/dev/null
+    done
+
+    # NVIDIA dGPU restore
+    if command -v nvidia-smi &>/dev/null; then
+        # Restore default power limit
+        local default_power
+        default_power=$(nvidia-smi --query-gpu=power.default_limit --format=csv,noheader,nounits 2>/dev/null | head -1 | cut -d'.' -f1)
+        if [[ -n "$default_power" && "$default_power" -gt 0 ]]; then
+            sudo -n nvidia-smi -pl "$default_power" 2>/dev/null
+        fi
+
+        # Re-enable NVIDIA GPU runtime suspend (power saving)
+        for nvidia_pci in /sys/bus/pci/devices/*/power/control; do
+            if [[ -f "${nvidia_pci%/power/control}/driver" ]]; then
+                local drv=$(basename "$(readlink -f "${nvidia_pci%/power/control}/driver")" 2>/dev/null)
+                if [[ "$drv" == "nvidia" ]]; then
+                    echo auto > "$nvidia_pci" 2>/dev/null
+                fi
+            fi
+        done
+
+        # Disable persistence mode (allow GPU to sleep)
+        sudo -n nvidia-smi -pm 0 2>/dev/null
+    fi
+
+    # Restore power profile to balanced
+    if command -v powerprofilesctl &>/dev/null; then
+        powerprofilesctl set balanced 2>/dev/null
+    fi
+
+    log "Balanced mode restored"
+}
+
+cleanup() {
+    pkill -f steam-library-mount 2>/dev/null || true
+    pkill -f gaming-keybind-monitor 2>/dev/null || true
+    sudo -n /usr/local/bin/gamescope-nm-stop 2>/dev/null || true
+    restore_balanced_mode
+    rm -f /tmp/.gaming-session-active
+}
+trap cleanup EXIT INT TERM
+
+# Enable performance mode immediately on session start
+enable_performance_mode
+
+if /usr/bin/lspci 2>/dev/null | grep -qi nvidia; then
+    export PATH="/usr/local/lib/gamescope-nvidia:$PATH"
+fi
+
+sudo -n /usr/local/bin/gamescope-nm-start 2>/dev/null || {
+    log "Warning: Could not start NetworkManager"
+}
+
+if [[ -x /usr/local/bin/steam-library-mount ]]; then
+    /usr/local/bin/steam-library-mount &
+    log "Steam library drive monitor started"
+else
+    log "Warning: steam-library-mount not found"
+fi
+
+echo "gamescope" > /tmp/.gaming-session-active
+
+keybind_ok=true
+
+if ! python3 -c "import evdev" 2>/dev/null; then
+    log "WARNING: python-evdev not installed"
+    keybind_ok=false
+fi
+
+if ! groups | grep -qw input; then
+    log "WARNING: User not in 'input' group"
+    keybind_ok=false
+fi
+
+if $keybind_ok && ! ls /dev/input/event* >/dev/null 2>&1; then
+    log "WARNING: No input devices accessible"
+    keybind_ok=false
+fi
+
+if $keybind_ok; then
+    /usr/local/bin/gaming-keybind-monitor &
+    log "Keybind monitor started (Super+Shift+R to exit)"
+else
+    log "Keybind monitor NOT started"
+fi
+
+export QT_IM_MODULE=steam
+export GTK_IM_MODULE=Steam
+export STEAM_DISABLE_AUDIO_DEVICE_SWITCHING=1
+export STEAM_ENABLE_VOLUME_HANDLER=1
+
+/usr/share/gamescope-session-plus/gamescope-session-plus steam
+rc=$?
+
+exit $rc
