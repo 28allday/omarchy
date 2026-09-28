@@ -375,8 +375,9 @@ pass "agent launcher has a keyboard shortcut"
 cat >"$mock_bin/omarchy-agent" <<'SH'
 #!/bin/bash
 printf '%s\0' omarchy-agent "$@" >"$OMARCHY_TEST_AGENT_OPEN_LOG"
-# Stands in for a session that lasts until the test ends it.
-while [[ -n ${OMARCHY_TEST_AGENT_SESSION:-} && ! -e $OMARCHY_TEST_AGENT_SESSION ]]; do
+# Stands in for a session that lasts until the test ends it, bounded so a failed run leaves nothing behind.
+for attempt in {1..100}; do
+  [[ -z ${OMARCHY_TEST_AGENT_SESSION:-} || -e $OMARCHY_TEST_AGENT_SESSION ]] && break
   sleep 0.1
 done
 SH
