@@ -308,8 +308,7 @@ QtObject {
     // which is the owner's call, not an unattended caller's.
     if (findRelativeBarLocation(config, id, "").found) return ""
     // A clone that is more than a widget stays active without its icon.
-    if (Util.isPlainObject(config) && Util.isPlainObject(config.bar)
-        && activeCloneFor(config, Util.canonicalWidgetId(String(id)))) return ""
+    if (Util.isPlainObject(config) && activeCloneFor(config, Util.canonicalWidgetId(String(id)))) return ""
     // The manifest scan is a subprocess and IPC answers before it returns, so
     // an id it has not reached yet is not one that does not exist.
     if (scanning && !installedPlugins[Util.canonicalWidgetId(String(id))]) return "not ready"
@@ -416,7 +415,8 @@ QtObject {
         ? candidateManifest.omarchy : null
       if (!candidateMetadata || String(candidateMetadata.clonedFrom || "") !== sourceId) continue
       if (Array.isArray(candidateManifest.kinds) && candidateManifest.kinds.indexOf("bar") !== -1) {
-        if (Util.canonicalWidgetId(String(config.bar.id || "")) === candidate) return candidate
+        var selectedBar = Util.isPlainObject(config.bar) ? String(config.bar.id || "") : ""
+        if (Util.canonicalWidgetId(selectedBar) === candidate) return candidate
       } else if (findEntryLocation(config, candidate).found) {
         return candidate
       }

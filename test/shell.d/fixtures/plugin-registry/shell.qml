@@ -403,6 +403,10 @@ ShellRoot {
     root.assertDeepEqual(root.config.bar.layout.left, [], "put places no source beside an active clone")
     registry.setEnabled("local.hybrid", false)
 
+    root.config = { version: 1, plugins: [{ id: "local.hybrid" }] }
+    root.assertEqual(registry.putBarWidget("omarchy.hybrid", {}), "", "put accepts a widget whose clone is active in a config without a bar")
+    root.assertDeepEqual(root.config.plugins, [{ id: "local.hybrid" }], "put leaves a clone active in a config without a bar")
+
     root.config = { version: 1, bar: { layout: { left: [], center: [], right: [] } }, plugins: [] }
     registry.setEnabled("local.grouped-panel", true)
     root.assertDeepEqual(root.config.plugins, [{ id: "local.grouped-panel" }], "enabling an ordinary clone adds it")
