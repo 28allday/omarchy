@@ -389,6 +389,20 @@ ShellRoot {
     root.assertTrue(root.config.disabledPlugins === undefined, "disabling a multi-kind clone enables the source")
     root.assertDeepEqual(root.config.plugins, [], "restoring a clone's source leaves no orphan plugins entry")
 
+    // A multi-kind clone stays active without its icon, and put must no more
+    // switch it back to its source then than while the icon is there.
+    root.config = {
+      version: 1,
+      bar: { layout: { left: [{ id: "omarchy.hybrid" }], center: [], right: [] } },
+      plugins: []
+    }
+    registry.setEnabled("local.hybrid", true)
+    root.config.bar.layout.left = []
+    root.assertEqual(registry.putBarWidget("omarchy.hybrid", {}), "", "put accepts a widget whose clone is active without an icon")
+    root.assertTrue(registry.isEnabled("local.hybrid"), "put leaves a clone without an icon enabled")
+    root.assertDeepEqual(root.config.bar.layout.left, [], "put places no source beside an active clone")
+    registry.setEnabled("local.hybrid", false)
+
     root.config = { version: 1, bar: { layout: { left: [], center: [], right: [] } }, plugins: [] }
     registry.setEnabled("local.grouped-panel", true)
     root.assertDeepEqual(root.config.plugins, [{ id: "local.grouped-panel" }], "enabling an ordinary clone adds it")

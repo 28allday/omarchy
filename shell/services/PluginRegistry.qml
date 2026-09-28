@@ -307,6 +307,9 @@ QtObject {
     // Enabling a source whose clone is active switches back to the built-in,
     // which is the owner's call, not an unattended caller's.
     if (findRelativeBarLocation(config, id, "").found) return ""
+    // A clone that is more than a widget stays active without its icon.
+    if (Util.isPlainObject(config) && Util.isPlainObject(config.bar)
+        && activeCloneFor(config, Util.canonicalWidgetId(String(id)))) return ""
     // The manifest scan is a subprocess and IPC answers before it returns, so
     // an id it has not reached yet is not one that does not exist.
     if (scanning && !installedPlugins[Util.canonicalWidgetId(String(id))]) return "not ready"
