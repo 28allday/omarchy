@@ -24,9 +24,16 @@ mkdir -p "$stub_bin" "$test_tmp/dmi"
 # The detector reads DMI from absolute paths, so run a copy pointed at fixtures.
 sed -e "s|/sys/class/dmi/id/|$test_tmp/dmi/|g" "$detector" >"$stub_bin/omarchy-hw-acer-predator-v4"
 
+installed_kernel=7.2.5-arch1-1
+mkdir -p "$test_tmp/modules/$installed_kernel"
+
+# Like the real one, it resolves against the running kernel unless -k names one.
 cat >"$stub_bin/modinfo" <<'SH'
 #!/bin/bash
 
+kernel=$RUNNING_KERNEL
+[[ $1 == "-k" ]] && kernel=$2
+[[ -d $TEST_MODULES/$kernel ]] || { echo "modinfo: ERROR: Module alias acer_wmi not found." >&2; exit 1; }
 (( ${NO_PREDATOR_V4:-0} == 1 )) || echo 'predator_v4:Enable features for predator laptops that use predator sense v4 (bool)'
 echo 'ec_raw_mode:Enable EC raw mode (bool)'
 SH
@@ -58,14 +65,16 @@ set_dmi() {
 
 run_leaf() {
   local script="$test_tmp/leaf.sh"
-  sed -e "s|/etc/modprobe.d|$test_tmp/etc/modprobe.d|g" "$leaf" >"$script"
+  sed -e "s|/etc/modprobe.d|$test_tmp/etc/modprobe.d|g" -e "s|/usr/lib/modules|$test_tmp/modules|g" "$leaf" >"$script"
 
-  PATH="$stub_bin:$PATH" bash -eE -o pipefail -c 'source "$1"' bash "$script" </dev/null >/dev/null
+  PATH="$stub_bin:$PATH" TEST_MODULES="$test_tmp/modules" RUNNING_KERNEL="${RUNNING_KERNEL:-$installed_kernel}" \
+    bash -eE -o pipefail -c 'source "$1"' bash "$script" </dev/null >/dev/null
 }
 
 run_migration() {
   : >"$calls"
   PATH="$stub_bin:$PATH" TEST_LOG="$calls" OMARCHY_ACER_WMI_CONF="$conf" \
+    TEST_MODULES="$test_tmp/modules" RUNNING_KERNEL="$installed_kernel" \
     bash -euo pipefail "$migration" >/dev/null
 }
 
@@ -77,6 +86,14 @@ run_leaf
 grep -qx 'options acer_wmi predator_v4=1' "$conf" 2>/dev/null ||
   fail "the Nitro ANV14-61 gets predator_v4" "$(ls -R "$test_tmp/etc" 2>&1)"
 pass "the Nitro ANV14-61 gets predator_v4"
+
+# The installer runs under arch-chroot, where the running kernel is the live
+# ISO's and /usr/lib/modules holds only the target's.
+rm -rf "${test_tmp:?}/etc"
+RUNNING_KERNEL=7.1.9-arch1-1 run_leaf
+grep -qx 'options acer_wmi predator_v4=1' "$conf" 2>/dev/null ||
+  fail "an install whose live kernel differs from the target's gets predator_v4" "$(ls -R "$test_tmp/etc" 2>&1)"
+pass "an install whose live kernel differs from the target's gets predator_v4"
 
 # acer-wmi already quirks these, and forcing the option would replace their
 # quirks with fewer ones: the AN515-58 would lose fan PWM, the PH16-72 its Turbo.
